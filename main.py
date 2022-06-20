@@ -3,20 +3,75 @@ from PyPDF2 import PdfFileReader, PdfFileWriter
 
 
 @functions_framework.http
-def hello(request):
-    return "Hello world!"
+def loadHomePage(request):
+    return {
+        "action": {
+            "navigations": [
+                {
+                    "pushCard": {
+                        "header": {
+                            "title": "Test"
+                        },
+                        "sections": [
+                            {
+                                "widgets": [
+                                    {
+                                        "textParagraph": {
+                                            "text": "test"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
 
 
-def decrypt_pdf(input_path, output_path, password):
-    with open(input_path, 'rb') as input_file, \
-            open(output_path, 'wb') as output_file:
+@functions_framework.http
+def displayTax(request):
+    print("GOT  REQUEST")
+    print("------------")
+    print(request.get_json(silent=True))
+    print("------------")
+
+    return {
+        "action": {
+            "navigations": [
+                {
+                    "pushCard": {
+                        "header": {
+                            "title": "Property tax"
+                        },
+                        "sections": [
+                            {
+                                "widgets": [
+                                    {
+                                        "textParagraph": {
+                                            "text": "xxx"
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+
+def decrypt_pdf_to_text(input_path, password):
+    all_lines = []
+    with open(input_path, 'rb') as input_file:
         reader = PdfFileReader(input_file)
         reader.decrypt(password)
-        writer = PdfFileWriter()
         for i in range(reader.getNumPages()):
-            writer.addPage(reader.getPage(i))
-        writer.write(output_file)
+            all_lines += reader.getPage(i).extract_text().splitlines()
+    return all_lines
 
 
 if __name__ == '__main__':
-    decrypt_pdf('encrypted.pdf', 'decrypted.pdf', '92010308593')
+    lines = decrypt_pdf_to_text('encrypted.pdf', '')
+    print(lines)

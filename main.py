@@ -1,5 +1,7 @@
 import functions_framework
-from PyPDF2 import PdfFileReader, PdfFileWriter
+from PyPDF2 import PdfFileReader
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 
 @functions_framework.http
@@ -32,25 +34,30 @@ def loadHomePage(request):
 
 @functions_framework.http
 def displayTax(request):
-    print("GOT  REQUEST")
-    print("------------")
-    print(request.get_json(silent=True))
-    print("------------")
+    message_id = request.get_json()['gmail']['messageId']
+    message_token = request.get_json()['gmail']['accessToken']
+    access_token = request.get_json()['authorizationEventObject']['userOAuthToken']
 
+    creds = Credentials(access_token)
+    service = build('gmail', 'v1', credentials=creds)
+    request = service.users().messages().get(userId='me', id=message_id, format='metadata')
+    request.headers = {'X-Goog-Gmail-Access-Token': message_token}
+    results = request.execute()
+    subject = [h['value'] for h in results['payload']['headers'] if h['name'] == 'Subject'].pop()
     return {
         "action": {
             "navigations": [
                 {
                     "pushCard": {
                         "header": {
-                            "title": "Property tax"
+                            "title": "Display subject"
                         },
                         "sections": [
                             {
                                 "widgets": [
                                     {
                                         "textParagraph": {
-                                            "text": "xxx"
+                                            "text": subject
                                         }
                                     }
                                 ]

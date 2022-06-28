@@ -25,12 +25,28 @@ pip freeze > requirements.txt
 
 Follow https://developers.google.com/workspace/add-ons/alternate-runtimes-quickstart
 
+### Creat Secret with passwords
+
+On the https://console.cloud.google.com/security/secret-manager create a secret with a map of gmail address to PESEL
+
+Example:
+```json
+{
+  "asdf@gmail.com": "85033395735",
+  "ghij@gmail.com": "67050512753"
+}
+```
+
+```bash
+gcloud functions deploy displayTax --runtime python38 --trigger-http --set-secrets=/etc/secrets/email-to-pesel.json=email-to-pesel:latest
+```
+
 ### Create Cloud Functions
 
 ```bash
 gcloud functions deploy loadHomePage --runtime python38 --trigger-http
 gcloud functions call loadHomePage
-gcloud functions deploy displayTax --runtime python38 --trigger-http
+gcloud functions deploy displayTax --runtime python38 --trigger-http --set-secrets=/email-to-pesel=email-to-pesel:latest
 gcloud functions call displayTax
 ```
 

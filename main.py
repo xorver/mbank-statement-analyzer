@@ -1,9 +1,12 @@
+import re
+
 import functions_framework
 from PyPDF2 import PdfFileReader
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from base64 import urlsafe_b64decode
 from io import BytesIO
+from decimal import Decimal
 import json
 
 
@@ -16,22 +19,96 @@ def decrypt_pdf_to_text(input_stream, password):
     return all_lines
 
 
-@functions_framework.http
-def loadHomePage(request):
+def is_date(text):
+    return re.fullmatch('\d\d-\d\d-\d\d\d\d', text)
+
+
+def to_decimal(amount):
+    return Decimal(re.sub(r' ', '', re.sub(r',', '.', amount)))
+
+def get_amounts(text):
+    match = re.search(r'(-?\d+( \d\d\d)*,\d\d) (-?\d+( \d\d\d)*,\d\d)', text)
+    if match:
+        return [to_decimal(match.group(1)), to_decimal(match.group(3))]
+
+class Transaction:
+    def __init__(self, lines):
+        self.lines = lines
+        self.date = lines[0]
+        if re.search(r'PRZELEW NA TWOJE CELE', lines[1]):
+            self.kind = 'PRZELEW NA TWOJE CELE'
+            self.amount = get_amounts(lines[1])[0]
+            self.balance = get_amounts(lines[1])[1]
+            self.sender = None
+        else:
+            self.kind = lines[1][10:]
+            self.amount = get_amounts(lines[-1])[0]
+            self.balance = get_amounts(lines[-1])[1]
+            self.sender = lines[2]
+
+    def __str__(self):
+        return f'{self.amount} - from: "{self.sender}"'
+
+
+def extract_transactions(text_lines):
+    LINE_DENY_LIST = [
+        r'księgowaniaOpis operacji  Kwota Saldo po operacji',
+        r'.*Data operacji.*',
+        r'xxx',
+        r'Środki zgromadzone na rachunku.*',
+        r'Niniejszy dokument sporządzono na podstawie.*',
+        r'Nie wymaga podpisu ani stempla.',
+        r'W przypadku wystąpienia niezgodności.*',
+        r'kontakt z mLinią.*',
+        r'[0-9]+/[0-9]+',
+        r'',
+        r'mBank S.A. ul. Prosta 18.*',
+        r'.*posiadający numer identyfikacji podatkowej NIP: 526-021-50-88.*',
+        r'Saldo końcowe:.*'
+    ]
+
+    # clear lines out of noise
+    lines_without_prefix = text_lines[text_lines.index('księgowaniaOpis operacji  Kwota Saldo po operacji') + 1:]
+    cleared_lines = [line for line in lines_without_prefix if not any([re.fullmatch(pattern, line) for pattern in LINE_DENY_LIST])]
+
+    # extract transactions
+    operation = None
+    operations = []
+    for line in cleared_lines:
+        if is_date(line):
+            operation = [line]
+            operations.append(operation)
+        else:
+            operation.append(line)
+    return [Transaction(o) for o in operations]
+
+
+def extract_property_transactions(transactions):
+    RENTERS = [
+        r'Adam .* SWIFT',
+        r'MZURI SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ.*',
+        r'.*MASZ LA.*'
+    ]
+
+    return [t for t in transactions if t.kind in ['PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY', 'PRZELEW WEWNĘTRZNY PRZYCHODZĄCY']
+            and any([re.search(pattern, t.sender) for pattern in RENTERS])]
+
+
+def action(text):
     return {
         "action": {
             "navigations": [
                 {
                     "pushCard": {
                         "header": {
-                            "title": "Tax calculator"
+                            "title": "mBank rent tax calculator"
                         },
                         "sections": [
                             {
                                 "widgets": [
                                     {
                                         "textParagraph": {
-                                            "text": "open the mbank monthly statement email"
+                                            "text": text
                                         }
                                     }
                                 ]
@@ -42,6 +119,11 @@ def loadHomePage(request):
             ]
         }
     }
+
+
+@functions_framework.http
+def loadHomePage(request):
+    return action("Please open email entitled 'mBank - elektroniczne zestawienie operacji za {miesiac} {rok}'.")
 
 
 @functions_framework.http
@@ -57,6 +139,13 @@ def displayTax(request):
     request = service.users().messages().get(userId='me', id=message_id, format='full')
     request.headers = {'X-Goog-Gmail-Access-Token': message_token}
     message = request.execute()
+
+    # error if email does not have the mbank statement
+    subject = [h['value'] for h in message['payload']['headers'] if h['name'] == 'Subject'][0]
+    if not re.match(r'mBank - elektroniczne zestawienie operacji.*', subject):
+        return action("Please open email entitled 'mBank - elektroniczne zestawienie operacji za {miesiac} {rok}'.")
+
+    # get bank statement attachment ID
     part0 = [p0 for p0 in message['payload']['parts'] if p0['partId'] == '0'].pop()
     part01 = [p01 for p01 in part0['parts'] if p01['partId'] == '0.1'].pop()
     attachment_id = part01['body']['attachmentId']
@@ -75,34 +164,24 @@ def displayTax(request):
         passwords = json.load(f)
     content = decrypt_pdf_to_text(stream_data, passwords[email])
 
-    return {
-        "action": {
-            "navigations": [
-                {
-                    "pushCard": {
-                        "header": {
-                            "title": "Calculate taxes"
-                        },
-                        "sections": [
-                            {
-                                "widgets": [
-                                    {
-                                        "textParagraph": {
-                                            "text": content[20]
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                }
-            ]
-        }
-    }
+    # fetch transactions
+    transactions = extract_transactions(content)
+    property_transactions = extract_property_transactions(transactions)
+
+    # calculate income and tax
+    income = sum([t.amount for t in property_transactions])
+    tax = (income * Decimal(0.085)).quantize(Decimal('0.01'))
+    return action('\n\n'.join([str(t) for t in property_transactions] + [f'{income} (Income) * 8.5% (Tax) = {tax}']))
 
 
-
-
+# For testing the addon locally, provide the password before execution
 if __name__ == '__main__':
-    lines = decrypt_pdf_to_text('encrypted.pdf', '')
-    print(lines)
+    with open('encrypted.pdf', 'rb') as f:
+        lines = decrypt_pdf_to_text(f, '')
+    transactions = extract_transactions(lines)
+    property_transactions = extract_property_transactions(transactions)
+    income = sum([t.amount for t in property_transactions])
+    tax = (income * Decimal(0.085)).quantize(Decimal('0.01'))
+    for t in property_transactions:
+        print(str(t))
+    print(f'{income} (Income) * 8.5% (Tax) = {tax}')

@@ -7,7 +7,7 @@
   "addOns": {
     "common": {
       "name": "Display tax",
-      "logoUrl": "https://github.com/webdog/octicons-png/raw/master/black/beaker.png",
+      "logoUrl": "https://raw.githubusercontent.com/webdog/octicons-png/main/black/briefcase.png",
       "homepageTrigger": {
         "runFunction": "https://us-central1-mbank-statement-prod.cloudfunctions.net/loadHomePage"
       }

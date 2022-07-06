@@ -46,7 +46,7 @@ gcloud functions deploy displayTax --runtime python38 --trigger-http --set-secre
 ```bash
 gcloud functions deploy loadHomePage --runtime python38 --trigger-http
 gcloud functions call loadHomePage
-gcloud functions deploy displayTax --runtime python38 --trigger-http --set-secrets=/email-to-pesel=email-to-pesel:latest
+gcloud functions deploy displayTax --runtime python38 --trigger-http --set-secrets=/etc/secrets/email-to-pesel.json=email-to-pesel:latest
 gcloud functions call displayTax
 ```
 

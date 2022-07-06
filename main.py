@@ -27,7 +27,11 @@ def to_decimal(amount):
     return Decimal(re.sub(r' ', '', re.sub(r',', '.', amount)))
 
 def get_amounts(text):
-    match = re.search(r'(-?\d+( \d\d\d)*,\d\d) (-?\d+( \d\d\d)*,\d\d)', text)
+    NOISY_SUBJECTS = ['górska 10/25']
+    cleaned = text
+    for noise in NOISY_SUBJECTS:
+        cleaned = cleaned.replace(noise, '')
+    match = re.search(r'(-?\d+( \d\d\d)*,\d\d) (-?\d+( \d\d\d)*,\d\d)', cleaned)
     if match:
         return [to_decimal(match.group(1)), to_decimal(match.group(3))]
 
@@ -37,6 +41,11 @@ class Transaction:
         self.date = lines[0]
         if re.search(r'PRZELEW NA TWOJE CELE', lines[1]):
             self.kind = 'PRZELEW NA TWOJE CELE'
+            self.amount = get_amounts(lines[1])[0]
+            self.balance = get_amounts(lines[1])[1]
+            self.sender = None
+        elif re.search(r'PRZELEW WALUTOWY PRZYCHODZĄCY', lines[1]):
+            self.kind = 'PRZELEW WALUTOWY PRZYCHODZĄCY'
             self.amount = get_amounts(lines[1])[0]
             self.balance = get_amounts(lines[1])[1]
             self.sender = None

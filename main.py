@@ -49,14 +49,19 @@ class Transaction:
             self.amount = get_amounts(lines[1])[0]
             self.balance = get_amounts(lines[1])[1]
             self.sender = None
+        elif re.search(r'UZNANIE NATYCH. TRANSAKCJA WALUT.', lines[1]):
+            self.kind = 'TRANSAKCJA WALUTOWA'
+            self.amount = get_amounts(lines[1])[0]
+            self.balance = get_amounts(lines[1])[1]
+            self.sender = None
         else:
             self.kind = lines[1][10:]
             self.amount = get_amounts(lines[-1])[0]
             self.balance = get_amounts(lines[-1])[1]
-            self.sender = lines[2]
+            self.sender = lines[2] if len(lines) > 2 else None
 
     def __str__(self):
-        return f'{self.amount} - from: "{self.sender}"'
+        return f'{self.amount} - from: "{self.sender}"\n\t{self.lines}'
 
 
 def extract_transactions(text_lines):
@@ -185,8 +190,9 @@ def displayTax(request):
 
 # For testing the addon locally, provide the password before execution
 if __name__ == '__main__':
-    with open('encrypted.pdf', 'rb') as f:
-        lines = decrypt_pdf_to_text(f, '')
+    with open('password.txt', 'rb') as password:
+        with open('encrypted.pdf', 'rb') as f:
+            lines = decrypt_pdf_to_text(f, password.readlines()[0])
     transactions = extract_transactions(lines)
     property_transactions = extract_property_transactions(transactions)
     income = sum([t.amount for t in property_transactions])

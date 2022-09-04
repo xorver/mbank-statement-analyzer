@@ -17,9 +17,7 @@ source venv/bin/activate
 
 ```bash
 pip freeze > requirements.txt
-```
-
-
+``
 
 ## Gcloud Configuration
 

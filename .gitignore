@@ -131,3 +131,4 @@ dmypy.json
 .idea
 encrypted.pdf
 decrypted.pdf
+password.txt

@@ -8,7 +8,18 @@ from base64 import urlsafe_b64decode
 from io import BytesIO
 from decimal import Decimal
 import json
+import logging
 
+RENTERS = [
+    r'Adam .* SWIFT',
+    r'MZURI SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ.*',
+    r'.*MASZ LA.*'
+]
+
+INCOMMING_OPERATION_TYPES = [
+    'PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY',
+    'PRZELEW WEWNĘTRZNY PRZYCHODZĄCY'
+]
 
 def decrypt_pdf_to_text(input_stream, password):
     all_lines = []
@@ -25,6 +36,7 @@ def is_date(text):
 
 def to_decimal(amount):
     return Decimal(re.sub(r' ', '', re.sub(r',', '.', amount)))
+
 
 def get_amounts(text):
     NOISY_SUBJECTS = ['górska 10/25']
@@ -83,7 +95,8 @@ def extract_transactions(text_lines):
 
     # clear lines out of noise
     lines_without_prefix = text_lines[text_lines.index('księgowaniaOpis operacji  Kwota Saldo po operacji') + 1:]
-    cleared_lines = [line for line in lines_without_prefix if not any([re.fullmatch(pattern, line) for pattern in LINE_DENY_LIST])]
+    cleared_lines = [line for line in lines_without_prefix if
+                     not any([re.fullmatch(pattern, line) for pattern in LINE_DENY_LIST])]
 
     # extract transactions
     operation = None
@@ -94,18 +107,33 @@ def extract_transactions(text_lines):
             operations.append(operation)
         else:
             operation.append(line)
-    return [Transaction(o) for o in operations]
+    transactions = []
+    failed = []
+    for o in operations:
+        try:
+            transactions.append(Transaction(o))
+        except:
+            logging.exception(f'failed to parse operation: ${o}')
+            failed.append(' '.join(o))
+    return (transactions, failed)
+
+
+def fetch_property_transactions(lines):
+    (transactions, failed) = extract_transactions(lines)
+    failed_property_operations = [o for o in failed if is_property_operation(o)]
+    if failed_property_operations:
+        raise RuntimeError(f'Failed to parse property operations ${failed_property_operations}')
+    return extract_property_transactions(transactions)
 
 
 def extract_property_transactions(transactions):
-    RENTERS = [
-        r'Adam .* SWIFT',
-        r'MZURI SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ.*',
-        r'.*MASZ LA.*'
-    ]
-
-    return [t for t in transactions if t.kind in ['PRZELEW ZEWNĘTRZNY PRZYCHODZĄCY', 'PRZELEW WEWNĘTRZNY PRZYCHODZĄCY']
+    return [t for t in transactions if t.kind in INCOMMING_OPERATION_TYPES
             and any([re.search(pattern, t.sender) for pattern in RENTERS])]
+
+
+def is_property_operation(operation):
+    return any([re.search(pattern, operation) for pattern in RENTERS]) and \
+           any([re.search(pattern, operation) for pattern in INCOMMING_OPERATION_TYPES])
 
 
 def action(text):
@@ -176,25 +204,22 @@ def displayTax(request):
     email = [h['value'] for h in message['payload']['headers'] if h['name'] == 'Delivered-To'].pop()
     with open('/etc/secrets/email-to-pesel.json') as f:
         passwords = json.load(f)
-    content = decrypt_pdf_to_text(stream_data, passwords[email])
+    lines = decrypt_pdf_to_text(stream_data, passwords[email])
 
     # fetch transactions
-    transactions = extract_transactions(content)
-    property_transactions = extract_property_transactions(transactions)
+    property_transactions = fetch_property_transactions(lines)
 
     # calculate income and tax
     income = sum([t.amount for t in property_transactions])
     tax = (income * Decimal(0.085)).quantize(Decimal('0.01'))
     return action('\n\n'.join([str(t) for t in property_transactions] + [f'{income} (Income) * 8.5% (Tax) = {tax}']))
 
-
 # For testing the addon locally, provide the password before execution
 if __name__ == '__main__':
     with open('password.txt', 'rb') as password:
         with open('encrypted.pdf', 'rb') as f:
             lines = decrypt_pdf_to_text(f, password.readlines()[0])
-    transactions = extract_transactions(lines)
-    property_transactions = extract_property_transactions(transactions)
+    property_transactions = fetch_property_transactions(lines)
     income = sum([t.amount for t in property_transactions])
     tax = (income * Decimal(0.085)).quantize(Decimal('0.01'))
     for t in property_transactions:

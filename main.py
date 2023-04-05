@@ -11,7 +11,7 @@ import json
 import logging
 
 RENTERS = [
-    r'Adam .* SWIFT',
+    r'ADAM .* SWIFT',
     r'MZURI SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ.*',
     r'.*MASZ LA.*'
 ]

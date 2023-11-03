@@ -13,7 +13,8 @@ import logging
 RENTERS = [
     r'ADAM .* SWIFT',
     r'MZURI SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ.*',
-    r'.*MASZ LA.*'
+    r'.*MASZ LA.*',
+    r'Airbnb Payments .*'
 ]
 
 INCOMMING_OPERATION_TYPES = [

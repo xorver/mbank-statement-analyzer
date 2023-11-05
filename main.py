@@ -40,10 +40,10 @@ def to_decimal(amount):
 
 
 def get_amounts(text):
-    NOISY_SUBJECTS = ['górska 10/25']
+    NOISY_SUBJECTS = ['górska 10/25', r'payout \d\d\d\d\d\d\d\d\d']
     cleaned = text
     for noise in NOISY_SUBJECTS:
-        cleaned = cleaned.replace(noise, '')
+        cleaned = re.sub(noise, '', cleaned)
     match = re.search(r'(-?\d+( \d\d\d)*,\d\d) (-?\d+( \d\d\d)*,\d\d)', cleaned)
     if match:
         return [to_decimal(match.group(1)), to_decimal(match.group(3))]

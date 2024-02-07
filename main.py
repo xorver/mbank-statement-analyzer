@@ -14,7 +14,9 @@ RENTERS = [
     r'ADAM .* SWIFT',
     r'MZURI SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ.*',
     r'.*MASZ LA.*',
-    r'Airbnb Payments .*'
+    r'Airbnb Payments .*',
+    r'BOOKING.COM .*',
+    r'PAYONEER EUROPE .*',
 ]
 
 INCOMMING_OPERATION_TYPES = [
